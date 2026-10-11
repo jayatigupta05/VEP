@@ -1,0 +1,12 @@
+flask
+numpy
+pandas
+scikit-learn
+torch
+torch-geometric
+pyarrow
+pysam
+py2bit
+pyBigWig
+matplotlib
+tqdm

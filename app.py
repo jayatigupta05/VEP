@@ -1,165 +1,978 @@
-import numpy as np
-import torch
-import torch.nn as nn
-from flask import Flask, jsonify, render_template_string, request
+#!/usr/bin/env python3
+"""
+Simple local testing UI for GenoHybrid-VEP.
+
+Run:
+    pip install flask
+    python app.py
+
+Then open:
+    http://127.0.0.1:5000
+
+Expected files in the same folder:
+    app.py
+    genohybrid_vcf_predict.py
+
+The predictor will use:
+    /content/drive/MyDrive/variant_effect_prediction
+
+by default. Change PROJECT_DIR below if running outside Colab/Drive.
+"""
+
+from pathlib import Path
+import uuid
+
+from flask import (
+    Flask,
+    request,
+    render_template_string,
+    send_file,
+    flash,
+    redirect,
+    url_for
+)
+
+import pandas as pd
+
+from genohybrid_vcf_predict import predict_vcf
+
+
+# ============================================================
+# CONFIG
+# ============================================================
+
+PROJECT_DIR = Path(
+    "/content/drive/MyDrive/variant_effect_prediction"
+)
+
+BASE_DIR = Path(__file__).resolve().parent
+
+UPLOAD_DIR = BASE_DIR / "uploads"
+OUTPUT_DIR = BASE_DIR / "prediction_outputs"
+
+UPLOAD_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+ALLOWED_SUFFIXES = (
+    ".vcf",
+    ".vcf.gz"
+)
+
+MAX_UPLOAD_MB = 50
+
+
+# ============================================================
+# FLASK APP
+# ============================================================
 
 app = Flask(__name__)
 
-# -----------------------------------------------------------------
-# 1. 3-CLASS MULTI-ARMED MODEL ARCHITECTURE
-# -----------------------------------------------------------------
-class MultiClassMultiArmedPredictor(nn.Module):
-    def __init__(self, tabular_features_dim=5, num_classes=3):
-        super(MultiClassMultiArmedPredictor, self).__init__()
+app.secret_key = (
+    "genohybrid-local-testing-key"
+)
 
-        # Arm 1: 1D CNN Sequence Branch
-        self.seq_net = nn.Sequential(
-            nn.Conv1d(in_channels=4, out_channels=32, kernel_size=2, padding=0),
-            nn.ReLU(),
-            nn.Flatten()
-        )
+app.config[
+    "MAX_CONTENT_LENGTH"
+] = (
+    MAX_UPLOAD_MB
+    * 1024
+    * 1024
+)
 
-        # Arm 2: Dense MLP Tabular Branch
-        self.tab_net = nn.Sequential(
-            nn.Linear(tabular_features_dim, 16),
-            nn.ReLU()
-        )
 
-        # Fusion Head -> Outputs 3 Raw Logits
-        self.fc = nn.Sequential(
-            nn.Linear(32 + 16, 16),
-            nn.ReLU(),
-            nn.Linear(16, num_classes)
-        )
+# ============================================================
+# HTML
+# ============================================================
 
-    def forward(self, x_seq, x_tab):
-        x_seq = x_seq.reshape(-1, 4, 2)
-        x_seq = self.seq_net(x_seq)
-        x_tab = self.tab_net(x_tab)
-        x_combined = torch.cat((x_seq, x_tab), dim=1)
-        return self.fc(x_combined)
-
-# Setup device & model
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = MultiClassMultiArmedPredictor(tabular_features_dim=5, num_classes=3).to(device)
-
-# Load your 3-class weights file
-WEIGHTS_PATH = '3class_classifier.pth'  # or 'arm1:MultiArm.pth'
-try:
-    model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=device))
-    print(f" Successfully loaded 3-Class PyTorch model weights from: {WEIGHTS_PATH}")
-except Exception as e:
-    print(f"⚠️ Warning: Could not load weight file ({e}). Running demo pass.")
-
-model.eval()
-
-# Class Map
-CLASS_NAMES = {0: "Benign", 1: "Pathogenic", 2: "VUS (Uncertain Significance)"}
-
-# -----------------------------------------------------------------
-# 2. BARE-BONES MINIMAL UI
-# -----------------------------------------------------------------
-BASIC_UI = """
+PAGE_TEMPLATE = """
 <!DOCTYPE html>
-<html>
-<body>
-    <h3>VEP 3-Class Model Tester</h3>
-    <p>Paste JSON into the box:</p>
-    <textarea id="box" rows="8" cols="45">{
-  "ref_allele": "G",
-  "alt_allele": "C",
-  "number_submitters": 25,
-  "origin_simple": "germline",
-  "review_stars": 4.0,
-  "has_somatic_impact": false,
-  "gene_vulnerability": 0.95
-}</textarea><br><br>
-    <button onclick="test()">Predict</button>
-    <pre id="out"></pre>
+<html lang="en">
 
-    <script>
-        async function test() {
-            const raw = document.getElementById('box').value;
-            const res = await fetch('/predict', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: raw
-            });
-            const data = await res.json();
-            document.getElementById('out').innerText = JSON.stringify(data, null, 2);
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>GenoHybrid-VEP</title>
+
+    <style>
+
+        body {
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+
+            background:
+                #f6f7f9;
+
+            color:
+                #222;
+
+            margin:
+                0;
+
+            padding:
+                0;
         }
-    </script>
+
+        .container {
+            width:
+                min(
+                    1100px,
+                    92%
+                );
+
+            margin:
+                40px auto;
+        }
+
+        .card {
+            background:
+                white;
+
+            border:
+                1px solid #e1e4e8;
+
+            border-radius:
+                12px;
+
+            padding:
+                24px;
+
+            margin-bottom:
+                24px;
+
+            box-shadow:
+                0 2px 8px
+                rgba(
+                    0,
+                    0,
+                    0,
+                    0.04
+                );
+        }
+
+        h1 {
+            margin-top:
+                0;
+
+            font-size:
+                28px;
+        }
+
+        h2 {
+            font-size:
+                20px;
+
+            margin-top:
+                0;
+        }
+
+        .subtitle {
+            color:
+                #666;
+
+            margin-bottom:
+                24px;
+        }
+
+        .upload-box {
+            border:
+                2px dashed #c8ccd0;
+
+            border-radius:
+                10px;
+
+            padding:
+                28px;
+
+            text-align:
+                center;
+
+            background:
+                #fafbfc;
+        }
+
+        input[type=file] {
+            margin:
+                16px 0;
+        }
+
+        button,
+        .button-link {
+            background:
+                #111;
+
+            color:
+                white;
+
+            border:
+                none;
+
+            border-radius:
+                8px;
+
+            padding:
+                11px 18px;
+
+            cursor:
+                pointer;
+
+            font-size:
+                14px;
+
+            text-decoration:
+                none;
+
+            display:
+                inline-block;
+        }
+
+        button:hover,
+        .button-link:hover {
+            opacity:
+                0.88;
+        }
+
+        .flash {
+            background:
+                #fff2f2;
+
+            border:
+                1px solid #f2b9b9;
+
+            color:
+                #8b1e1e;
+
+            padding:
+                12px;
+
+            border-radius:
+                8px;
+
+            margin-bottom:
+                18px;
+        }
+
+        .summary-grid {
+            display:
+                grid;
+
+            grid-template-columns:
+                repeat(
+                    auto-fit,
+                    minmax(
+                        160px,
+                        1fr
+                    )
+                );
+
+            gap:
+                12px;
+
+            margin-bottom:
+                20px;
+        }
+
+        .metric {
+            background:
+                #f8f9fa;
+
+            border:
+                1px solid #eceff1;
+
+            border-radius:
+                9px;
+
+            padding:
+                14px;
+        }
+
+        .metric-label {
+            color:
+                #666;
+
+            font-size:
+                12px;
+
+            margin-bottom:
+                5px;
+        }
+
+        .metric-value {
+            font-size:
+                21px;
+
+            font-weight:
+                600;
+        }
+
+        .table-wrap {
+            overflow-x:
+                auto;
+        }
+
+        table {
+            width:
+                100%;
+
+            border-collapse:
+                collapse;
+
+            font-size:
+                13px;
+        }
+
+        th,
+        td {
+            border-bottom:
+                1px solid #e9ecef;
+
+            padding:
+                9px;
+
+            text-align:
+                left;
+
+            white-space:
+                nowrap;
+        }
+
+        th {
+            background:
+                #f8f9fa;
+
+            position:
+                sticky;
+
+            top:
+                0;
+        }
+
+        .small {
+            color:
+                #777;
+
+            font-size:
+                12px;
+        }
+
+        .warning {
+            background:
+                #fff8e5;
+
+            border:
+                1px solid #f3d27a;
+
+            padding:
+                12px;
+
+            border-radius:
+                8px;
+
+            margin:
+                12px 0;
+        }
+
+    </style>
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <div class="card">
+
+        <h1>
+            GenoHybrid-VEP
+        </h1>
+
+        <div class="subtitle">
+            Local GRCh38 VCF pathogenicity prediction test interface
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+
+                {% for message in messages %}
+
+                    <div class="flash">
+                        {{ message }}
+                    </div>
+
+                {% endfor %}
+
+            {% endif %}
+        {% endwith %}
+
+
+        <form
+            method="POST"
+            action="/predict"
+            enctype="multipart/form-data"
+        >
+
+            <div class="upload-box">
+
+                <strong>
+                    Upload a GRCh38 VCF
+                </strong>
+
+                <br>
+
+                <span class="small">
+                    Supported:
+                    .vcf and .vcf.gz
+                    · Max {{ max_upload_mb }} MB
+                </span>
+
+                <br>
+
+                <input
+                    type="file"
+                    name="vcf_file"
+                    accept=".vcf,.vcf.gz"
+                    required
+                >
+
+                <br>
+
+                <button type="submit">
+                    Run prediction
+                </button>
+
+            </div>
+
+        </form>
+
+        <div class="warning">
+
+            Best results require the VCF to contain
+            Ensembl VEP <code>CSQ</code>
+            or SnpEff <code>ANN</code>
+            annotations for gene and consequence information.
+
+        </div>
+
+    </div>
+
+
+    {% if result %}
+
+        <div class="card">
+
+            <h2>
+                Prediction summary
+            </h2>
+
+            <div class="summary-grid">
+
+                <div class="metric">
+
+                    <div class="metric-label">
+                        Total records
+                    </div>
+
+                    <div class="metric-value">
+                        {{ result.total }}
+                    </div>
+
+                </div>
+
+
+                <div class="metric">
+
+                    <div class="metric-label">
+                        Valid predictions
+                    </div>
+
+                    <div class="metric-value">
+                        {{ result.valid }}
+                    </div>
+
+                </div>
+
+
+                <div class="metric">
+
+                    <div class="metric-label">
+                        Benign
+                    </div>
+
+                    <div class="metric-value">
+                        {{ result.benign }}
+                    </div>
+
+                </div>
+
+
+                <div class="metric">
+
+                    <div class="metric-label">
+                        Pathogenic
+                    </div>
+
+                    <div class="metric-value">
+                        {{ result.pathogenic }}
+                    </div>
+
+                </div>
+
+
+                <div class="metric">
+
+                    <div class="metric-label">
+                        VUS
+                    </div>
+
+                    <div class="metric-value">
+                        {{ result.vus }}
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <a
+                class="button-link"
+                href="{{ result.download_url }}"
+            >
+                Download full CSV
+            </a>
+
+        </div>
+
+
+        <div class="card">
+
+            <h2>
+                Preview
+            </h2>
+
+            <div class="small">
+                Showing up to the first
+                {{ result.preview_count }}
+                rows.
+            </div>
+
+            <br>
+
+            <div class="table-wrap">
+
+                {{ result.table_html | safe }}
+
+            </div>
+
+        </div>
+
+    {% endif %}
+
+</div>
+
 </body>
+
 </html>
 """
 
-# -----------------------------------------------------------------
-# 3. ENDPOINTS
-# -----------------------------------------------------------------
-@app.route('/')
-def home():
-    return render_template_string(BASIC_UI)
 
-@app.route('/predict', methods=['POST'])
+# ============================================================
+# HELPERS
+# ============================================================
+
+def valid_filename(
+    filename
+):
+    """
+    Accept .vcf or .vcf.gz only.
+    """
+
+    filename = (
+        filename
+        .lower()
+        .strip()
+    )
+
+    return (
+        filename.endswith(
+            ".vcf"
+        )
+        or
+        filename.endswith(
+            ".vcf.gz"
+        )
+    )
+
+
+def make_summary(
+    df,
+    output_filename
+):
+
+    predicted = (
+        df[
+            "predicted_class"
+        ]
+        if "predicted_class"
+        in df.columns
+        else pd.Series(
+            dtype=str
+        )
+    )
+
+    valid_count = int(
+        predicted
+        .notna()
+        .sum()
+    )
+
+    benign = int(
+        (
+            predicted
+            == "Benign"
+        )
+        .sum()
+    )
+
+    pathogenic = int(
+        (
+            predicted
+            == "Pathogenic"
+        )
+        .sum()
+    )
+
+    vus = int(
+        (
+            predicted
+            == "VUS"
+        )
+        .sum()
+    )
+
+    preview_columns = [
+        "Chromosome",
+        "Start",
+        "ReferenceAlleleVCF",
+        "AlternateAlleleVCF",
+        "GeneSymbol",
+        "consequence_category",
+        "predicted_class",
+        "confidence",
+        "final_prob_benign",
+        "final_prob_pathogenic",
+        "final_prob_vus",
+        "status"
+    ]
+
+    preview_columns = [
+        column
+        for column
+        in preview_columns
+        if column
+        in df.columns
+    ]
+
+    preview_df = (
+        df[
+            preview_columns
+        ]
+        .head(
+            50
+        )
+        .copy()
+    )
+
+    probability_columns = [
+        "confidence",
+        "final_prob_benign",
+        "final_prob_pathogenic",
+        "final_prob_vus"
+    ]
+
+    for column in probability_columns:
+
+        if column in preview_df.columns:
+
+            preview_df[
+                column
+            ] = (
+                preview_df[
+                    column
+                ]
+                .round(
+                    4
+                )
+            )
+
+    table_html = (
+        preview_df
+        .to_html(
+            index=False,
+            classes="result-table",
+            border=0,
+            escape=True
+        )
+    )
+
+    return {
+        "total":
+            len(
+                df
+            ),
+
+        "valid":
+            valid_count,
+
+        "benign":
+            benign,
+
+        "pathogenic":
+            pathogenic,
+
+        "vus":
+            vus,
+
+        "preview_count":
+            min(
+                len(df),
+                50
+            ),
+
+        "table_html":
+            table_html,
+
+        "download_url":
+            url_for(
+                "download_result",
+                filename=output_filename
+            )
+    }
+
+
+# ============================================================
+# ROUTES
+# ============================================================
+
+@app.route(
+    "/",
+    methods=[
+        "GET"
+    ]
+)
+def index():
+
+    return render_template_string(
+        PAGE_TEMPLATE,
+        result=None,
+        max_upload_mb=MAX_UPLOAD_MB
+    )
+
+
+@app.route(
+    "/predict",
+    methods=[
+        "POST"
+    ]
+)
 def predict():
-    if not request.is_json:
-        return jsonify({"error": "Invalid JSON"}), 400
 
-    data = request.get_json()
+    if "vcf_file" not in request.files:
 
-    # Preprocess Sequence Arm (8 features)
-    ref_allele = str(data.get('ref_allele', 'A')).upper()
-    alt_allele = str(data.get('alt_allele', 'G')).upper()
-    bases = ['A', 'C', 'G', 'T']
-    
-    # FIXED: Group by base channel so reshape(-1, 4, 2) gets [[Ref_A, Alt_A], [Ref_C, Alt_C], ...]
-    seq_vector = []
-    for base in bases:
-        seq_vector.append(1.0 if ref_allele == base else 0.0)
-        seq_vector.append(1.0 if alt_allele == base else 0.0)
+        flash(
+            "No file was uploaded."
+        )
 
-    # Preprocess Tabular Arm (5 features)
-    num_submitters = int(data.get('number_submitters', 1))
-    origin_simple = str(data.get('origin_simple', 'germline')).lower()
-    review_stars = float(data.get('review_stars', 1.0))
-    has_somatic = bool(data.get('has_somatic_impact', False))
-    gene_vulnerability = float(data.get('gene_vulnerability', 0.5))
+        return redirect(
+            url_for(
+                "index"
+            )
+        )
 
-    scaled_submitters = float(np.log1p(num_submitters))
-    origin_num = 1.0 if 'germline' in origin_simple else (2.0 if 'somatic' in origin_simple else 0.0)
-    somatic_impact = 1.0 if has_somatic else 0.0
+    uploaded_file = request.files[
+        "vcf_file"
+    ]
 
-    tab_vector = [scaled_submitters, origin_num, review_stars, somatic_impact, gene_vulnerability]
+    if (
+        uploaded_file.filename
+        is None
+        or uploaded_file.filename
+        == ""
+    ):
 
-    # Convert to PyTorch Tensors
-    x_seq_tensor = torch.tensor([seq_vector], dtype=torch.float32).to(device)
-    x_tab_tensor = torch.tensor([tab_vector], dtype=torch.float32).to(device)
+        flash(
+            "Please select a VCF file."
+        )
 
-    # Run Model Inference
-    with torch.no_grad():
-        logits = model(x_seq_tensor, x_tab_tensor)
-        probs = torch.softmax(logits, dim=1).squeeze(0).cpu().numpy()
+        return redirect(
+            url_for(
+                "index"
+            )
+        )
 
-    predicted_class_id = int(np.argmax(probs))
-    predicted_label = CLASS_NAMES[predicted_class_id]
+    if not valid_filename(
+        uploaded_file.filename
+    ):
 
-    # PRINT IN TERMINAL / CMD DIRECTLY
-    print("\n" + "="*50)
-    print(" INCOMING INFERENCE REQUEST")
-    print(f" Input: Ref={ref_allele}, Alt={alt_allele}, Stars={review_stars}, Vuln={gene_vulnerability}")
-    print(f" PREDICTED CLASS: {predicted_class_id} ({predicted_label})")
-    print(f" Class Probabilities: Benign={probs[0]*100:.2f}%, Pathogenic={probs[1]*100:.2f}%, VUS={probs[2]*100:.2f}%")
-    print("="*50 + "\n")
+        flash(
+            "Only .vcf and .vcf.gz files are supported."
+        )
 
-    return jsonify({
-        "predicted_class_id": predicted_class_id,
-        "predicted_class": predicted_label,
-        # "class_probabilities": {
-        #     "0_Benign": f"{round(float(probs[0]) * 100, 2)}%",
-        #     "1_Pathogenic": f"{round(float(probs[1]) * 100, 2)}%",
-        #     "2_VUS": f"{round(float(probs[2]) * 100, 2)}%"
-        # }
-    }), 200
+        return redirect(
+            url_for(
+                "index"
+            )
+        )
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+    run_id = (
+        uuid.uuid4()
+        .hex[
+            :10
+        ]
+    )
+
+    if (
+        uploaded_file.filename
+        .lower()
+        .endswith(
+            ".vcf.gz"
+        )
+    ):
+
+        upload_path = (
+            UPLOAD_DIR
+            /
+            f"{run_id}.vcf.gz"
+        )
+
+    else:
+
+        upload_path = (
+            UPLOAD_DIR
+            /
+            f"{run_id}.vcf"
+        )
+
+
+    output_filename = (
+        f"genohybrid_predictions_{run_id}.csv"
+    )
+
+    output_path = (
+        OUTPUT_DIR
+        /
+        output_filename
+    )
+
+
+    uploaded_file.save(
+        upload_path
+    )
+
+
+    try:
+
+        prediction_df = predict_vcf(
+            vcf_path=upload_path,
+            output_path=output_path,
+            project_dir=PROJECT_DIR
+        )
+
+
+    except Exception as error:
+
+        flash(
+            f"Prediction failed: {error}"
+        )
+
+        return redirect(
+            url_for(
+                "index"
+            )
+        )
+
+
+    result = make_summary(
+        prediction_df,
+        output_filename
+    )
+
+
+    return render_template_string(
+        PAGE_TEMPLATE,
+        result=result,
+        max_upload_mb=MAX_UPLOAD_MB
+    )
+
+
+@app.route(
+    "/download/<filename>",
+    methods=[
+        "GET"
+    ]
+)
+def download_result(
+    filename
+):
+
+    file_path = (
+        OUTPUT_DIR
+        /
+        filename
+    )
+
+    if not file_path.exists():
+
+        flash(
+            "Requested result file was not found."
+        )
+
+        return redirect(
+            url_for(
+                "index"
+            )
+        )
+
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+# ============================================================
+# RUN
+# ============================================================
+
+if __name__ == "__main__":
+
+    print(
+        "\nGenoHybrid-VEP local interface"
+    )
+
+    print(
+        "Open:"
+    )
+
+    print(
+        "http://127.0.0.1:5000\n"
+    )
+
+    app.run(
+        host="127.0.0.1",
+        port=5000,
+        debug=True,
+        use_reloader=False
+    )

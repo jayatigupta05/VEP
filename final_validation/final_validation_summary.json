@@ -1,0 +1,34 @@
+{
+  "model": "Locked tri-modal weighted late fusion",
+  "fusion_weights": {
+    "biomarker": 0.4,
+    "graph": 0.3,
+    "sequence": 0.3
+  },
+  "validation": "3-fold GroupKFold by gene",
+  "accuracy_mean": 0.8786,
+  "accuracy_std": 0.0075,
+  "balanced_accuracy_mean": 0.8356,
+  "balanced_accuracy_std": 0.0027,
+  "macro_f1_mean": 0.7867,
+  "macro_f1_std": 0.0038,
+  "mcc_mean": 0.7711,
+  "mcc_std": 0.01,
+  "confusion_matrix": [
+    [
+      29880,
+      608,
+      4133
+    ],
+    [
+      131,
+      3827,
+      1177
+    ],
+    [
+      1944,
+      4152,
+      54148
+    ]
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "fold": 2,
+  "accuracy": 0.8830588305883059,
+  "balanced_accuracy": 0.8371898116432503,
+  "macro_f1": 0.7902450734912093,
+  "mcc": 0.7767714826825596,
+  "train_size": 66667,
+  "val_size": 33333,
+  "minutes": 5.161391146977743,
+  "seq_epochs": 6,
+  "bio_epochs": 10,
+  "gcn_epochs": 20,
+  "fusion_weights": {
+    "biomarker": 0.4,
+    "graph": 0.3,
+    "sequence": 0.3
+  }
+}

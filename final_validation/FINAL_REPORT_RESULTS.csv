@@ -1,0 +1,2 @@
+Model,Validation,Accuracy,Balanced Accuracy,Macro F1,MCC,Fusion
+GenoHybrid-VEP Tri-Modal,3-fold GroupKFold by gene,0.87855,0.8357163332311118,0.7867081817799922,0.7710522599791174,Bio 0.40 / Graph 0.30 / Sequence 0.30

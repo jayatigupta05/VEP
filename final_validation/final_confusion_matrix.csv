@@ -1,0 +1,4 @@
+,Pred Benign,Pred Pathogenic,Pred VUS
+True Benign,29880,608,4133
+True Pathogenic,131,3827,1177
+True VUS,1944,4152,54148

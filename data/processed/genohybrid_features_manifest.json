@@ -1,0 +1,15 @@
+{
+  "sample_size_requested": 100000,
+  "sample_size_saved": 100000,
+  "random_seed": 42,
+  "reference_assembly": "GRCh38",
+  "sequence_storage_window_bp": 201,
+  "target_classes": {
+    "0": "Benign",
+    "1": "Pathogenic",
+    "2": "VUS"
+  },
+  "target_leakage_feature_removed": "Tab_Gene_Vulnerability",
+  "gnomad_status": "schema reserved; bulk population-frequency annotation intentionally separated from free-Colab preprocessing",
+  "output": "/content/drive/MyDrive/variant_effect_prediction/data/processed/genohybrid_features.parquet"
+}
