@@ -12,7 +12,7 @@ Expected project layout
 └── data/
     ├── processed/
     │   └── genohybrid_features.parquet
-    └── reference/
+    └── references/
         ├── hg38.2bit
         ├── hg38.phyloP100way.bw
         └── hg38.phastCons100way.bw
@@ -1995,7 +1995,7 @@ def predict_vcf(
     reference_dir = (
         project_dir
         / "data"
-        / "reference"
+        / "references"
     )
 
     checkpoint_dir = (
