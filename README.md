@@ -28,10 +28,6 @@ The planned application layer will allow users to upload a VCF file through a we
 - [Input and output expectations](#input-and-output-expectations)
 - [Reproducibility and data management](#reproducibility-and-data-management)
 - [Limitations](#limitations)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [Citation](#citation)
-- [License](#license)
 
 ## Overview
 
