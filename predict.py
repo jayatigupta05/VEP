@@ -1995,7 +1995,7 @@ def predict_vcf(
     reference_dir = (
         project_dir
         / "data"
-        / "reference"
+        / "references"
     )
 
     checkpoint_dir = (
@@ -2147,10 +2147,23 @@ def predict_vcf(
         device
     )
 
-    sequence_model.load_state_dict(
-        load_checkpoint_state(
-            seq_checkpoint
+    seq_state = load_checkpoint_state(
+        seq_checkpoint
+    )
+
+    # Compatibility with the original trained SequenceEncoder
+    if "encoder.embedding.weight" in seq_state:
+        seq_state["encoder.fc.0.weight"] = seq_state.pop(
+            "encoder.embedding.weight"
         )
+
+    if "encoder.embedding.bias" in seq_state:
+        seq_state["encoder.fc.0.bias"] = seq_state.pop(
+            "encoder.embedding.bias"
+        )
+
+    sequence_model.load_state_dict(
+        seq_state
     )
 
     biomarker_model.load_state_dict(
