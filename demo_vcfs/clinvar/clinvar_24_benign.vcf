@@ -1,0 +1,6 @@
+##fileformat=VCFv4.2
+##reference=GRCh38
+##contig=<ID=5>
+##INFO=<ID=CSQ,Number=.,Type=String,Description="Format: Allele|Consequence|SYMBOL|Feature">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+5	1060570	CV_DEMO	G	A	.	PASS	CSQ=A|intron_variant|SLC12A7|

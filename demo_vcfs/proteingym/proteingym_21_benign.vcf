@@ -1,0 +1,6 @@
+##fileformat=VCFv4.2
+##reference=GRCh38
+##contig=<ID=1>
+##INFO=<ID=CSQ,Number=.,Type=String,Description="Format: Allele|Consequence|SYMBOL|Feature">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+1	201039883	CV_DEMO	C	T	.	PASS	CSQ=T|missense_variant|CACNA1S|
