@@ -12,7 +12,7 @@ Expected project layout
 └── data/
     ├── processed/
     │   └── genohybrid_features.parquet
-    └── reference/
+    └── references/
         ├── hg38.2bit
         ├── hg38.phyloP100way.bw
         └── hg38.phastCons100way.bw

@@ -15,6 +15,61 @@ testing.
 > use predictions as the sole basis for medical or health decisions.
 
 ## Repository Contents
+GenoHybrid-VEP is a research project exploring the classification of genomic variants using complementary sequence, tabular, and graph-based representations. The project combines a convolutional neural network (CNN), a multilayer perceptron (MLP), and a graph convolutional network (GCN), with fusion experiments designed to investigate whether combining these modalities improves classification.
+
+The planned application layer will allow users to upload a VCF file through a web interface, process variants through a FastAPI backend, and view downloadable predictions and model explanations.
+
+> **Project status:** Research pipeline and model experiments are under development. The FastAPI service and VCF-upload frontend described below are planned components and should not be considered implemented until they are available in the repository.
+
+> **Research disclaimer:** This is a research prototype, not a clinical diagnostic system. Predictions must not be used as the sole basis for medical decisions.
+
+---
+
+## Contents
+
+- [Overview](#overview)
+- [Key goals](#key-goals)
+- [Architecture](#architecture)
+- [Model components](#model-components)
+- [Data pipeline](#data-pipeline)
+- [Validation and evaluation](#validation-and-evaluation)
+- [Planned VCF upload application](#planned-vcf-upload-application)
+- [Repository structure](#repository-structure)
+- [Requirements](#requirements)
+- [Setup](#setup)
+- [Running the research pipeline](#running-the-research-pipeline)
+- [Planned API design](#planned-api-design)
+- [Input and output expectations](#input-and-output-expectations)
+- [Reproducibility and data management](#reproducibility-and-data-management)
+- [Limitations](#limitations)
+
+## Overview
+
+Interpreting genomic variants requires combining evidence from different sources. A local DNA sequence window can represent nucleotide context, structured annotations can encode known variant characteristics, and a graph can represent relationships defined between variants.
+
+GenoHybrid-VEP investigates these sources through three model branches:
+
+1. **Sequence branch:** a CNN learns local patterns from an encoded DNA sequence surrounding a variant.
+2. **Tabular branch:** an MLP processes structured genomic annotations and derived features.
+3. **Graph branch:** a GCN learns node representations using node features and a defined graph structure.
+
+The project experiments with individual branches, two-branch combinations, prediction-level late fusion, and a tri-modal gated fusion model.
+
+The long-term goal is to expose a trained and validated model through an application where a user uploads a compatible VCF file and receives a structured prediction report.
+
+## Key goals
+
+- Build a reproducible pipeline for preparing genomic variant data.
+- Extract reference-sequence and evolutionary-conservation features.
+- Train and compare sequence, tabular, and graph-based models.
+- Investigate whether multimodal fusion improves predictive performance.
+- Evaluate generalization using gene-wise validation where configured.
+- Develop a FastAPI backend for VCF upload, validation, inference, and result retrieval.
+- Build a frontend for submitting VCF files and inspecting prediction results.
+
+## Architecture
+
+### Research pipeline
 
 ```text
 .
